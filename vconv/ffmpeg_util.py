@@ -109,12 +109,14 @@ def status() -> dict:
             "version": None,
             "source": None,
             "download_url": FFMPEG_DOWNLOAD_URLS.get(sys.platform),
+            "downloading": _manager.state(),
         }
     return {
         "status": "ok",
         "path": ff_path,
         "version": get_version(ff_path),
         "source": ff_src,
+        "downloading": _manager.state(),
     }
 
 
@@ -229,3 +231,69 @@ def download_ffmpeg(progress_cb=None) -> str:
             return ff_path
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# ---- 下载管理器（并发门 + 进度状态，供 UI 轮询） ----
+
+
+class DownloadManager:
+    """一键下载的并发门与进度状态。状态字典始终可序列化。"""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._active = False
+        self._percent = 0
+        self._stage = ""
+        self._error = ""
+        self._finished = False    # 最近一次下载已结束（成功或失败）
+
+    def state(self) -> dict:
+        with self._lock:
+            return {
+                "active": self._active,
+                "percent": self._percent,
+                "stage": self._stage,
+                "error": self._error,
+                "finished": self._finished,
+            }
+
+    def start(self) -> bool:
+        """启动后台下载；已在下载中返回 False。"""
+        with self._lock:
+            if self._active:
+                return False
+            self._active = True
+            self._percent = 0
+            self._stage = "准备下载"
+            self._error = ""
+            self._finished = False
+
+        def run() -> None:
+            try:
+                download_ffmpeg(self._on_progress)
+            except Exception as e:      # 下载/解压/校验失败：记录原因供 UI 展示
+                with self._lock:
+                    self._error = str(e)
+            finally:
+                with self._lock:
+                    self._finished = True
+                    self._active = False
+
+        threading.Thread(target=run, daemon=True, name="vconv-download").start()
+        return True
+
+    def _on_progress(self, percent: int, stage: str) -> None:
+        with self._lock:
+            self._percent = percent
+            self._stage = stage
+
+
+_manager = DownloadManager()
+
+
+def start_download() -> bool:
+    return _manager.start()
+
+
+def download_state() -> dict:
+    return _manager.state()

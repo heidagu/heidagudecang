@@ -54,6 +54,12 @@ def register_routes(app) -> None:
     def api_ffmpeg_status():
         return jsonify(ffmpeg_util.status())
 
+    @app.post("/api/ffmpeg/download")
+    def api_ffmpeg_download():
+        if not ffmpeg_util.start_download():
+            return jsonify({"error": "下载已在进行中"}), 409
+        return jsonify(ffmpeg_util.download_state()), 202
+
     @app.get("/api/hwaccel")
     def api_hwaccel():
         ff_path, _ = ffmpeg_util.find_binary("ffmpeg")

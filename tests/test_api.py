@@ -1,9 +1,12 @@
 """API 路由冒烟测试（Flask test client；不触发真实转换，快速且确定性）。"""
 from __future__ import annotations
 
+import threading
+import time
+
 import pytest
 
-from vconv import create_app, native_dialog
+from vconv import config, create_app, ffmpeg_util, native_dialog
 
 
 @pytest.fixture()
@@ -78,6 +81,69 @@ def test_probe_missing_file(client):
     r = client.post("/api/probe", json={"path": "/no/such/file.mp4"})
     assert r.status_code == 422
     assert "文件不存在" in r.get_json()["error"]
+
+
+def _wait_dl_idle(client, timeout=5.0):
+    """轮询等待下载管理器回到空闲。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        st = client.get("/api/ffmpeg").get_json()["downloading"]
+        if not st["active"]:
+            return st
+        time.sleep(0.05)
+    raise AssertionError("下载管理器未在 {} 秒内空闲".format(timeout))
+
+
+def test_ffmpeg_download_flow_and_concurrency(client, monkeypatch):
+    gate = threading.Event()
+    seen = []
+
+    def fake_download(progress_cb=None):
+        seen.append(progress_cb)
+        if progress_cb:
+            progress_cb(42, "下载中")
+        gate.wait(timeout=5)    # 阻塞直至测试放行
+        return "/fake/ffmpeg"
+
+    monkeypatch.setattr(ffmpeg_util, "download_ffmpeg", fake_download)
+
+    assert client.post("/api/ffmpeg/download").status_code == 202
+    # 并发门：已在下 → 409
+    r = client.post("/api/ffmpeg/download")
+    assert r.status_code == 409
+    assert "进行中" in r.get_json()["error"]
+
+    st = client.get("/api/ffmpeg").get_json()["downloading"]
+    assert st["active"] is True
+    assert st["percent"] == 42
+    assert st["stage"] == "下载中"
+    assert len(seen) == 1 and seen[0] is not None    # 进度回调已挂上
+
+    gate.set()
+    st = _wait_dl_idle(client)
+    assert st["finished"] is True
+    assert st["error"] == ""
+    # 完成后可再次启动
+    assert client.post("/api/ffmpeg/download").status_code == 202
+    _wait_dl_idle(client)
+
+
+def test_ffmpeg_download_error_surface(client, monkeypatch):
+    def fake_download(progress_cb=None):
+        raise RuntimeError("网络超时，请检查代理后重试")
+
+    monkeypatch.setattr(ffmpeg_util, "download_ffmpeg", fake_download)
+    assert client.post("/api/ffmpeg/download").status_code == 202
+    st = _wait_dl_idle(client)
+    assert st["finished"] is True
+    assert "网络超时" in st["error"]
+
+
+def test_settings_persist_to_disk(client):
+    client.put("/api/settings", json={"workers": 3, "default_output_dir": "/tmp/out"})
+    cfg = config.load_config()
+    assert cfg["workers"] == 3
+    assert cfg["default_output_dir"] == "/tmp/out"
 
 
 def test_pick_files_bridge(client, monkeypatch):

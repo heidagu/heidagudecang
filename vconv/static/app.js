@@ -90,10 +90,14 @@ function el(tag, cls, text) {
 }
 
 /* ---- ffmpeg 状态 ---- */
+let lastDlFinished = false;
+let dlTimer = null;
+
 async function loadFFmpeg() {
   try {
     const st = await api("/api/ffmpeg");
     const chip = $("ffmpeg-chip");
+    const dl = st.downloading || {};
     if (st.status === "ok") {
       chip.textContent = "ffmpeg " + (st.version || "") + "（" + (st.source || "已安装") + "）";
       chip.className = "chip ok";
@@ -103,10 +107,31 @@ async function loadFFmpeg() {
       chip.className = "chip err";
       $("btn-download").hidden = false;
     }
+    $("btn-clear-manual").hidden = st.source !== "config";
+
+    if (dl.active) {
+      $("dl-progress").textContent = "下载中 " + (dl.percent || 0) + "%（" + (dl.stage || "") + "）";
+      $("btn-download").disabled = true;
+      scheduleDlPoll();
+    } else if (dl.finished) {
+      $("btn-download").disabled = false;
+      if (dl.error) {
+        $("dl-progress").textContent = "下载失败: " + dl.error + "（可检查代理设置，或使用「手动指定路径」）";
+      } else if (!lastDlFinished) {
+        $("dl-progress").textContent = "";
+        toast("ffmpeg 下载完成");
+      }
+    }
+    lastDlFinished = !!dl.finished;
   } catch (e) {
     $("ffmpeg-chip").textContent = "状态获取失败";
     $("ffmpeg-chip").className = "chip err";
   }
+}
+
+function scheduleDlPoll() {
+  clearTimeout(dlTimer);
+  dlTimer = setTimeout(loadFFmpeg, 1200);
 }
 
 async function loadHw() {
@@ -153,15 +178,50 @@ async function saveSettings() {
 }
 
 async function startDownload() {
-  $("btn-download").disabled = true;
   try {
+    lastDlFinished = false;
+    $("dl-progress").textContent = "开始下载…";
+    $("btn-download").disabled = true;
     await api("/api/ffmpeg/download", { method: "POST" });
-    toast("ffmpeg 下载完成，正在校验…");
-    await loadFFmpeg();
+    scheduleDlPoll();
   } catch (e) {
     toast("下载失败: " + e.message, true);
+    $("btn-download").disabled = false;
   }
-  $("btn-download").disabled = false;
+}
+
+async function pickFFmpeg() {
+  try {
+    const data = await api("/api/pick-files", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder: false }),
+    });
+    if (data.cancelled || !data.paths || !data.paths.length) return;
+    await api("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ffmpeg_path: data.paths[0] }),
+    });
+    toast("已指定 ffmpeg 路径");
+    await loadFFmpeg();
+  } catch (e) {
+    toast("指定失败: " + e.message, true);
+  }
+}
+
+async function clearManual() {
+  try {
+    await api("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ffmpeg_path: "" }),
+    });
+    toast("已清除手动指定路径");
+    await loadFFmpeg();
+  } catch (e) {
+    toast("清除失败: " + e.message, true);
+  }
 }
 
 /* ---- 动态 UI 规则 ---- */
@@ -527,6 +587,8 @@ async function poll() {
 function bind() {
   $("btn-recheck").addEventListener("click", () => { loadFFmpeg(); loadHw(); });
   $("btn-download").addEventListener("click", startDownload);
+  $("btn-manual").addEventListener("click", pickFFmpeg);
+  $("btn-clear-manual").addEventListener("click", clearManual);
   $("btn-save-settings").addEventListener("click", saveSettings);
   $("btn-pick-outdir").addEventListener("click", pickOutdir);
   $("btn-add-files").addEventListener("click", pickFiles);
