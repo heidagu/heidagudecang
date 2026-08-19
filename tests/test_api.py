@@ -162,3 +162,69 @@ def test_pick_files_bridge(client, monkeypatch):
     r = client.post("/api/pick-files", json={"folder": True})
     assert r.get_json()["paths"] == ["/fake/out"]
     assert calls == [False, True]
+
+
+# ---- 磁盘镜像 ----
+
+def _wait_disc_terminal(client, task_id, timeout=10.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        for t in client.get("/api/disc").get_json()["tasks"]:
+            if t["id"] == task_id and t["status"] in ("done", "failed", "cancelled"):
+                return t
+        time.sleep(0.02)
+    raise AssertionError("镜像任务未在 {} 秒内结束".format(timeout))
+
+
+def test_disc_status_shape(client):
+    data = client.get("/api/disc").get_json()
+    assert data["platform"] in ("mac", "windows", "other")
+    assert isinstance(data["create"], list)
+    assert isinstance(data["extract"], list)
+    assert isinstance(data["tasks"], list)
+
+
+def test_disc_validation_errors(client):
+    r = client.post("/api/disc/pack", json={"source_dir": "/no/such/dir", "fmt": "iso"})
+    assert r.status_code == 422
+    assert "源文件夹不存在" in r.get_json()["error"]
+
+    r = client.post("/api/disc/pack", json={"source_dir": "/tmp", "fmt": "dmg"})
+    assert r.status_code == 422
+    assert "不支持" in r.get_json()["error"]
+
+    r = client.post("/api/disc/extract", json={"image_path": "/no/such.iso"})
+    assert r.status_code == 422
+    assert "镜像文件不存在" in r.get_json()["error"]
+
+    assert client.post("/api/disc/nope/cancel").status_code == 404
+    assert client.delete("/api/disc/nope").status_code == 404
+
+
+def test_disc_pack_flow(client, monkeypatch, tmp_path):
+    from vconv import discimage
+
+    src = tmp_path / "src"
+    src.mkdir()
+
+    monkeypatch.setattr(discimage._manager, "_run_pack",
+                        lambda task: discimage._manager._finish(task, "done"))
+    r = client.post("/api/disc/pack", json={"source_dir": str(src), "fmt": "iso"})
+    assert r.status_code == 201
+    task_id = r.get_json()["id"]
+
+    t = _wait_disc_terminal(client, task_id)
+    assert t["status"] == "done"
+    assert t["progress"] == 100.0
+    assert t["dest"].endswith("src.iso")
+
+    assert client.delete("/api/disc/" + task_id).status_code == 204
+    assert client.get("/api/disc").get_json()["tasks"] == []
+
+
+def test_disc_extract_rejects_bad_ext(client, tmp_path):
+    f = tmp_path / "x.exe"
+    f.write_text("x")
+    r = client.post("/api/disc/extract", json={"image_path": str(f)})
+    assert r.status_code == 422
+    assert "不支持的镜像格式" in r.get_json()["error"]

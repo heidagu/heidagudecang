@@ -424,6 +424,177 @@ async function pickOutdir() {
   }
 }
 
+/* ---- 磁盘镜像 ---- */
+const DISC_LABELS = {
+  queued: "排队中", running: "处理中", done: "完成",
+  failed: "失败", cancelled: "已取消",
+};
+let discCap = null;
+let lastDiscSig = "";
+
+function refreshDiscMode() {
+  const mode = document.querySelector('input[name="disc-mode"]:checked').value;
+  $("disc-pack").hidden = mode !== "pack";
+  $("disc-extract").hidden = mode !== "extract";
+}
+
+function applyDiscCap() {
+  if (!discCap) return;
+  const cap = $("disc-cap");
+  if (!discCap.create.length && !discCap.extract.length) {
+    cap.textContent = "当前平台不支持磁盘镜像功能";
+    $("disc-pack").hidden = true;
+    $("disc-extract").hidden = true;
+    for (const r of document.querySelectorAll('input[name="disc-mode"]')) r.disabled = true;
+    return;
+  }
+  const parts = [];
+  if (discCap.create.length) parts.push("打包 " + discCap.create.join(" / ").toUpperCase());
+  if (discCap.extract.length) parts.push("提取 " + discCap.extract.join(" / ").toUpperCase());
+  cap.textContent = "本机支持：" + parts.join("；");
+}
+
+async function pickDiscPath(inputId, folder) {
+  try {
+    const data = await api("/api/pick-files", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder: folder }),
+    });
+    if (!data.cancelled && data.paths && data.paths.length) {
+      $(inputId).value = data.paths[0];
+    }
+  } catch (e) {
+    toast("选择失败: " + e.message, true);
+  }
+}
+
+async function startDiscPack() {
+  const src = $("disc-src").value.trim();
+  if (!src) {
+    toast("请先选择源文件夹", true);
+    return;
+  }
+  try {
+    await api("/api/disc/pack", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source_dir: src, fmt: "iso", output_dir: $("disc-outdir").value.trim() }),
+    });
+    toast("已添加打包任务");
+    await loadDisc();
+  } catch (e) {
+    toast("打包失败: " + e.message, true);
+  }
+}
+
+async function startDiscExtract() {
+  const img = $("disc-img").value.trim();
+  if (!img) {
+    toast("请先选择镜像文件", true);
+    return;
+  }
+  try {
+    await api("/api/disc/extract", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_path: img, dest_dir: $("disc-dest").value.trim() }),
+    });
+    toast("已添加提取任务");
+    await loadDisc();
+  } catch (e) {
+    toast("提取失败: " + e.message, true);
+  }
+}
+
+function renderDiscTasks(tasks) {
+  const ul = $("disc-tasks");
+  const sig = JSON.stringify(tasks.map((t) => [t.id, t.status, t.progress, t.message, t.error]));
+  if (sig === lastDiscSig) return;
+  lastDiscSig = sig;
+  ul.textContent = "";
+  for (const t of tasks) ul.appendChild(discTaskRow(t));
+}
+
+function discTaskRow(t) {
+  const card = el("div", "job");
+  const head = el("div", "head");
+  const name = el("span", "name", (t.kind === "pack" ? "打包: " : "提取: ") + basename(t.source));
+  let pct = "";
+  if (t.status === "running" && t.progress >= 0) pct = " " + Math.floor(t.progress) + "%";
+  head.appendChild(name);
+  head.appendChild(el("span", "badge " + t.status, (DISC_LABELS[t.status] || t.status) + pct));
+
+  const out = el("div", "out", "→ " + t.dest);
+  const bar = el("div", "bar");
+  const fill = el("i");
+  if (t.progress >= 0) {
+    fill.style.width = Math.max(0, Math.min(100, t.progress || 0)) + "%";
+  } else if (t.status === "running") {
+    bar.className = "bar indet";
+  }
+  bar.appendChild(fill);
+
+  const meta = el("div", "meta");
+  if (t.message) meta.appendChild(el("span", "", t.message));
+
+  const actions = el("div", "actions");
+  if (t.status === "queued" || t.status === "running") {
+    const btn = el("button", "btn small", "取消");
+    btn.addEventListener("click", () => cancelDisc(t.id));
+    actions.appendChild(btn);
+  } else {
+    const btn = el("button", "btn small", "删除");
+    btn.addEventListener("click", () => deleteDisc(t.id));
+    actions.appendChild(btn);
+  }
+
+  card.appendChild(head);
+  card.appendChild(out);
+  card.appendChild(bar);
+  card.appendChild(meta);
+  if (t.status === "failed" && t.error) {
+    const errbox = el("div", "errbox");
+    const d = el("details");
+    d.open = true;
+    d.appendChild(el("summary", "", "错误详情"));
+    d.appendChild(el("pre", "", t.error));
+    errbox.appendChild(d);
+    card.appendChild(errbox);
+  }
+  if (actions.childNodes.length) card.appendChild(actions);
+  return card;
+}
+
+async function loadDisc() {
+  try {
+    const data = await api("/api/disc");
+    discCap = data;
+    applyDiscCap();
+    renderDiscTasks(data.tasks || []);
+  } catch (e) {
+    /* 静默，下个轮询周期重试 */
+  }
+}
+
+async function cancelDisc(id) {
+  try {
+    await api("/api/disc/" + encodeURIComponent(id) + "/cancel", { method: "POST" });
+    toast("已请求取消");
+  } catch (e) {
+    toast("取消失败: " + e.message, true);
+  }
+}
+
+async function deleteDisc(id) {
+  try {
+    await api("/api/disc/" + encodeURIComponent(id), { method: "DELETE" });
+  } catch (e) {
+    toast("删除失败: " + e.message, true);
+  }
+  await loadDisc();
+}
+
 /* ---- 提交任务 ---- */
 function buildSettings() {
   const codec = $("codec").value;
@@ -624,6 +795,10 @@ async function poll() {
   try {
     const data = await api("/api/jobs");
     renderJobs(data.jobs || [], data.history || []);
+    const disc = await api("/api/disc");
+    discCap = disc;
+    applyDiscCap();
+    renderDiscTasks(disc.tasks || []);
   } catch (e) {
     /* 服务器暂不可达时静默，下个周期重试 */
   }
@@ -644,6 +819,15 @@ function bind() {
     if (paths.length) { addPaths(paths); $("paste-paths").value = ""; }
   });
   $("btn-start").addEventListener("click", startJobs);
+  $("btn-disc-pick-src").addEventListener("click", () => pickDiscPath("disc-src", true));
+  $("btn-disc-pick-out").addEventListener("click", () => pickDiscPath("disc-outdir", true));
+  $("btn-disc-pick-img").addEventListener("click", () => pickDiscPath("disc-img", false));
+  $("btn-disc-pick-dest").addEventListener("click", () => pickDiscPath("disc-dest", true));
+  $("btn-disc-pack").addEventListener("click", startDiscPack);
+  $("btn-disc-extract").addEventListener("click", startDiscExtract);
+  for (const r of document.querySelectorAll('input[name="disc-mode"]')) {
+    r.addEventListener("change", refreshDiscMode);
+  }
   $("crf").addEventListener("input", () => { $("crf-val").textContent = $("crf").value; });
   $("qscale").addEventListener("input", () => { $("qscale-val").textContent = $("qscale").value; });
 
@@ -659,6 +843,7 @@ function bind() {
 /* ---- 启动 ---- */
 bind();
 refreshUI();
+refreshDiscMode();
 loadFFmpeg();
 loadHw();
 loadSettings();

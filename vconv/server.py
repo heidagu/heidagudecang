@@ -5,7 +5,7 @@ import os
 
 from flask import jsonify, request
 
-from . import config, ffmpeg_util, ffprobe_util, native_dialog
+from . import config, discimage, ffmpeg_util, ffprobe_util, native_dialog
 from .models import ConversionSettings
 
 
@@ -129,6 +129,51 @@ def register_routes(app) -> None:
     @app.delete("/api/jobs/<job_id>")
     def api_delete_job(job_id):
         err = engine.delete(job_id)
+        if err:
+            return jsonify({"error": err}), (404 if "不存在" in err else 409)
+        return "", 204
+
+    # ---- 磁盘镜像 ----
+
+    @app.get("/api/disc")
+    def api_disc_status():
+        return jsonify({**discimage.capabilities(), "tasks": discimage.list_disc_tasks()})
+
+    @app.post("/api/disc/pack")
+    def api_disc_pack():
+        data = request.get_json(silent=True) or {}
+        try:
+            task = discimage.submit_pack(
+                (data.get("source_dir") or "").strip(),
+                (data.get("fmt") or "iso").strip().lower(),
+                (data.get("output_dir") or "").strip(),
+            )
+        except discimage.DiscError as e:
+            return jsonify({"error": str(e)}), 422
+        return jsonify(task.to_dict()), 201
+
+    @app.post("/api/disc/extract")
+    def api_disc_extract():
+        data = request.get_json(silent=True) or {}
+        try:
+            task = discimage.submit_extract(
+                (data.get("image_path") or "").strip(),
+                (data.get("dest_dir") or "").strip(),
+            )
+        except discimage.DiscError as e:
+            return jsonify({"error": str(e)}), 422
+        return jsonify(task.to_dict()), 201
+
+    @app.post("/api/disc/<task_id>/cancel")
+    def api_disc_cancel(task_id):
+        task = discimage.cancel_disc(task_id)
+        if not task:
+            return jsonify({"error": "任务不存在或已结束"}), 404
+        return jsonify(task.to_dict())
+
+    @app.delete("/api/disc/<task_id>")
+    def api_disc_delete(task_id):
+        err = discimage.delete_disc(task_id)
         if err:
             return jsonify({"error": err}), (404 if "不存在" in err else 409)
         return "", 204
