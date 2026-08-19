@@ -14,7 +14,13 @@ MAX_WORKERS = 32
 
 
 def app_data_dir() -> str:
-    """应用数据目录：macOS ~/Library/Application Support/vconv；Windows %LOCALAPPDATA%\\vconv。"""
+    """应用数据目录：macOS ~/Library/Application Support/vconv；Windows %LOCALAPPDATA%\\vconv。
+
+    可用环境变量 VCONV_DATA_DIR 覆盖（便携模式/测试用）。
+    """
+    override = os.environ.get("VCONV_DATA_DIR")
+    if override:
+        return override
     if sys.platform == "darwin":
         base = os.path.expanduser("~/Library/Application Support")
     elif os.name == "nt":
