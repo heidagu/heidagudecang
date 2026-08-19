@@ -47,16 +47,26 @@ header {
 }
 h1 { font-size: 20px; margin: 0; }
 h1 .sub { font-size: 13px; color: var(--muted); font-weight: normal; margin-left: 6px; }
+#tabs { display: flex; gap: 6px; }
+.tab {
+  padding: 7px 16px; border-radius: 7px; text-decoration: none;
+  color: var(--muted); font-size: 14px; border: 1px solid transparent;
+}
+.tab:hover { color: var(--accent); }
+.tab.active { background: var(--accent); color: var(--accent-text); }
 h2 { font-size: 15px; margin: 0 0 12px; }
 main {
+  padding: 20px 24px 60px;
+  max-width: 1280px; margin: 0 auto;
+}
+#convert-layout {
   display: grid;
   grid-template-columns: minmax(360px, 1.3fr) minmax(340px, 1fr);
   gap: 20px;
-  padding: 20px 24px 60px;
-  max-width: 1280px; margin: 0 auto;
   align-items: start;
 }
-@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { #convert-layout { grid-template-columns: 1fr; } }
+#page-disc { max-width: 760px; margin: 0 auto; }
 
 .card, #jobs-panel {
   background: var(--card);

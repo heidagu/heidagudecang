@@ -840,8 +840,19 @@ function bind() {
   }
 }
 
+/* ---- 页面切换（视频转换 / 磁盘镜像）---- */
+function showPage() {
+  const disc = location.hash === "#disc";
+  $("page-convert").hidden = disc;
+  $("page-disc").hidden = !disc;
+  $("tab-convert").classList.toggle("active", !disc);
+  $("tab-disc").classList.toggle("active", disc);
+}
+window.addEventListener("hashchange", showPage);
+
 /* ---- 启动 ---- */
 bind();
+showPage();
 refreshUI();
 refreshDiscMode();
 loadFFmpeg();

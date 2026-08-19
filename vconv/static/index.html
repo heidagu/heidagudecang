@@ -8,7 +8,11 @@
 </head>
 <body>
 <header>
-  <h1>VConv <span class="sub">视频格式转换</span></h1>
+  <h1>VConv <span class="sub">视频转换 · 磁盘镜像</span></h1>
+  <nav id="tabs">
+    <a href="#convert" id="tab-convert" class="tab active">视频转换</a>
+    <a href="#disc" id="tab-disc" class="tab">磁盘镜像</a>
+  </nav>
   <div id="ffmpeg-box" class="ffmpeg-box">
     <span id="ffmpeg-chip" class="chip">检测中…</span>
     <button id="btn-recheck" class="btn small">重新检测</button>
@@ -20,6 +24,9 @@
 </header>
 
 <main>
+  <!-- 页面一：视频转换 -->
+  <section id="page-convert" class="page">
+  <div id="convert-layout">
   <!-- 左侧：任务 -->
   <section id="jobs-panel">
     <h2>转换任务 <span id="job-count" class="muted"></span></h2>
@@ -33,46 +40,6 @@
 
   <!-- 右侧：设置与文件 -->
   <section id="settings-panel">
-    <div class="card">
-      <h2>磁盘镜像 <span class="sub">ISO / IMG</span></h2>
-      <div class="radio-row">
-        <label><input type="radio" name="disc-mode" value="pack" checked> 文件夹 → 镜像</label>
-        <label><input type="radio" name="disc-mode" value="extract"> 提取镜像内容</label>
-      </div>
-      <div id="disc-pack">
-        <div class="row">
-          <label class="grow">源文件夹
-            <input type="text" id="disc-src" placeholder="点击右侧按钮选择文件夹" readonly>
-          </label>
-          <button id="btn-disc-pick-src" class="btn small">选择文件夹…</button>
-        </div>
-        <div class="row">
-          <label class="grow">输出目录
-            <input type="text" id="disc-outdir" placeholder="留空 = 源文件夹所在目录">
-          </label>
-          <button id="btn-disc-pick-out" class="btn small">选择…</button>
-        </div>
-        <button id="btn-disc-pack" class="btn primary">开始打包为 ISO</button>
-      </div>
-      <div id="disc-extract" hidden>
-        <div class="row">
-          <label class="grow">镜像文件
-            <input type="text" id="disc-img" placeholder="ISO / IMG 文件" readonly>
-          </label>
-          <button id="btn-disc-pick-img" class="btn small">选择镜像…</button>
-        </div>
-        <div class="row">
-          <label class="grow">提取到目录
-            <input type="text" id="disc-dest" placeholder="留空 = 镜像旁边自动建「xxx-提取」文件夹">
-          </label>
-          <button id="btn-disc-pick-dest" class="btn small">选择…</button>
-        </div>
-        <button id="btn-disc-extract" class="btn primary">开始提取</button>
-      </div>
-      <p id="disc-cap" class="muted"></p>
-      <div id="disc-tasks"></div>
-    </div>
-
     <div class="card">
       <h2>转换设置</h2>
       <fieldset id="video-fs">
@@ -264,6 +231,51 @@
       </div>
       <ul id="files"></ul>
       <button id="btn-start" class="btn primary big">开始转换</button>
+    </div>
+  </section>
+  </div>
+  </section>
+
+  <!-- 页面二：磁盘镜像 -->
+  <section id="page-disc" class="page" hidden>
+    <div class="card">
+      <h2>磁盘镜像 <span class="sub">文件夹 ↔ 镜像</span></h2>
+      <div class="radio-row">
+        <label><input type="radio" name="disc-mode" value="pack" checked> 文件夹 → 镜像</label>
+        <label><input type="radio" name="disc-mode" value="extract"> 提取镜像内容</label>
+      </div>
+      <div id="disc-pack">
+        <div class="row">
+          <label class="grow">源文件夹
+            <input type="text" id="disc-src" placeholder="点击右侧按钮选择文件夹" readonly>
+          </label>
+          <button id="btn-disc-pick-src" class="btn small">选择文件夹…</button>
+        </div>
+        <div class="row">
+          <label class="grow">输出目录
+            <input type="text" id="disc-outdir" placeholder="留空 = 源文件夹所在目录">
+          </label>
+          <button id="btn-disc-pick-out" class="btn small">选择…</button>
+        </div>
+        <button id="btn-disc-pack" class="btn primary">开始打包为 ISO</button>
+      </div>
+      <div id="disc-extract" hidden>
+        <div class="row">
+          <label class="grow">镜像文件
+            <input type="text" id="disc-img" placeholder="ISO / IMG 文件" readonly>
+          </label>
+          <button id="btn-disc-pick-img" class="btn small">选择镜像…</button>
+        </div>
+        <div class="row">
+          <label class="grow">提取到目录
+            <input type="text" id="disc-dest" placeholder="留空 = 镜像旁边自动建「xxx-提取」文件夹">
+          </label>
+          <button id="btn-disc-pick-dest" class="btn small">选择…</button>
+        </div>
+        <button id="btn-disc-extract" class="btn primary">开始提取</button>
+      </div>
+      <p id="disc-cap" class="muted"></p>
+      <div id="disc-tasks"></div>
     </div>
   </section>
 </main>
