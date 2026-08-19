@@ -28,6 +28,10 @@ COPY_CODECS = {
     "mov": {"h264", "h265", "mpeg4", "prores"},
     "webm": {"vp8", "vp9", "av1"},
     "mkv": None,
+    "avi": {"mpeg4", "mpeg2video", "mjpeg"},
+    "flv": {"h264", "mpeg4"},
+    "m4v": {"h264", "h265", "mpeg4"},
+    "ts": {"h264", "h265", "mpeg2video"},
 }
 
 

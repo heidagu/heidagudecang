@@ -60,3 +60,53 @@ def test_from_dict_applies_codec_crf_default():
     assert ConversionSettings.from_dict({"video_codec": "av1"}).crf == 30
     # 显式指定时不覆盖
     assert ConversionSettings.from_dict({"video_codec": "vp9", "crf": 20}).crf == 20
+    assert ConversionSettings.from_dict({"video_codec": "vp8"}).crf == 10
+    assert ConversionSettings.from_dict({"video_codec": "mpeg4"}).qscale == 5
+
+
+def test_new_containers_accept_new_codecs():
+    assert S(container="avi", video_codec="mjpeg", quality_mode="qscale").validate() == []
+    assert S(container="flv", video_codec="mpeg4", quality_mode="qscale").validate() == []
+    assert S(container="m4v", video_codec="mpeg4", quality_mode="qscale").validate() == []
+    assert S(container="ts", video_codec="mpeg2video", quality_mode="qscale").validate() == []
+    assert S(container="mkv", video_codec="vp8").validate() == []
+    assert S(container="mov", video_codec="prores").validate() == []
+    # 不兼容组合仍报错
+    assert S(container="flv", video_codec="vp9").validate()
+    assert S(container="avi", video_codec="h265").validate()
+
+
+def test_qscale_validation():
+    assert S(video_codec="mpeg4", quality_mode="qscale", qscale=5).validate() == []
+    assert S(video_codec="mjpeg", quality_mode="qscale", qscale=31).validate() == []
+    assert S(video_codec="mpeg4", quality_mode="qscale", qscale=1).validate()
+    assert S(video_codec="mpeg4", quality_mode="qscale", qscale=32).validate()
+    # qscale 编码不能用 CRF 模式，CRF 编码不能用 qscale 模式
+    assert S(video_codec="mpeg4", quality_mode="crf").validate()
+    assert S(video_codec="h264", quality_mode="qscale").validate()
+
+
+def test_prores_validation():
+    assert S(video_codec="prores", container="mov").validate() == []
+    assert S(video_codec="prores", quality_mode="bitrate").validate()
+    assert S(video_codec="prores", prores_profile="bad").validate()
+    assert S(video_codec="prores", prores_profile="hq").validate() == []
+
+
+def test_two_pass_extended_codecs():
+    assert S(two_pass=True, quality_mode="bitrate", video_codec="vp8").validate() == []
+    assert S(two_pass=True, quality_mode="bitrate", video_codec="mpeg4").validate() == []
+    assert S(two_pass=True, quality_mode="bitrate", video_codec="mpeg2video").validate() == []
+    assert S(two_pass=True, quality_mode="bitrate", video_codec="mjpeg").validate()
+    assert S(two_pass=True, quality_mode="bitrate", video_codec="prores").validate()
+
+
+def test_audio_extended():
+    assert S(container="mkv", audio_mode="flac").validate() == []
+    assert S(container="mkv", audio_mode="ac3").validate() == []
+    assert S(container="mp4", audio_mode="ac3").validate()
+    assert S(audio_mode="ac3", audio_bitrate="loud").validate()
+    assert S(audio_mode="extract", audio_extract_ext="wav").validate() == []
+    assert S(audio_mode="extract", audio_extract_ext="flac").validate() == []
+    assert S(audio_mode="extract", audio_extract_ext="ac3").validate() == []
+    assert S(audio_mode="extract", audio_extract_ext="ogg").validate()

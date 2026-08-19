@@ -5,7 +5,8 @@ import os
 import tempfile
 from typing import List, Optional
 
-from .models import AUDIO_EXTRACT_EXTS, SOFTWARE_ENCODERS, ConversionSettings
+from .models import (AUDIO_EXTRACT_EXTS, PRORES_PROFILES, QSCALE_SPECS,
+                     SOFTWARE_ENCODERS, ConversionSettings)
 
 # 硬件编码器家族 → 画质预设参数（HW 编码器不支持 CRF，用各自的质量参数）
 HW_QUALITY_ARGS = {
@@ -16,7 +17,10 @@ HW_QUALITY_ARGS = {
     "amf": {"high": ["-b:v", "12M"], "medium": ["-b:v", "6M"], "low": ["-b:v", "3M"]},
 }
 
-AUDIO_ENCODERS = {"aac": "aac", "opus": "libopus", "mp3": "libmp3lame"}
+AUDIO_ENCODERS = {"aac": "aac", "opus": "libopus", "mp3": "libmp3lame", "flac": "flac", "ac3": "ac3"}
+
+# 无损/无码率概念的编码不传 -b:a（flac、wav 会忽略甚至报错）
+_LOSSLESS_AUDIO = {"flac", "pcm_s16le"}
 
 
 def hw_family(encoder: str) -> str:
@@ -56,11 +60,16 @@ def _video_args(settings: ConversionSettings, hw_encoder: Optional[str]) -> List
         family = hw_family(hw_encoder)
         quality = HW_QUALITY_ARGS.get(family, {}).get(settings.hw_quality, ["-b:v", "6M"])
         return ["-c:v", hw_encoder] + quality
+    if codec == "prores":
+        # ProRes 无 CRF/码率概念，用 -profile:v 档位控制质量
+        return ["-c:v", "prores_ks", "-profile:v", PRORES_PROFILES[settings.prores_profile]]
     args = ["-c:v", SOFTWARE_ENCODERS[codec]]
-    if settings.quality_mode == "crf":
+    if settings.quality_mode == "qscale":
+        args += ["-q:v", str(int(settings.qscale))]      # 数值越小质量越高
+    elif settings.quality_mode == "crf":
         args += ["-crf", str(int(settings.crf))]
-        if codec == "vp9":
-            args += ["-b:v", "0"]      # vp9 CRF 模式必须显式 -b:v 0
+        if codec in ("vp8", "vp9"):
+            args += ["-b:v", "0"]      # libvpx CRF 模式必须显式 -b:v 0
     else:
         args += ["-b:v", settings.bitrate]
     if codec in ("h264", "h265"):
@@ -76,8 +85,15 @@ def _audio_args(settings: ConversionSettings) -> List[str]:
         return ["-an"]
     if mode == "extract":
         encoder = AUDIO_EXTRACT_EXTS[settings.audio_extract_ext]
-        return ["-vn", "-c:a", encoder, "-b:a", settings.audio_bitrate]
-    return ["-c:a", AUDIO_ENCODERS[mode], "-b:a", settings.audio_bitrate]
+        args = ["-vn", "-c:a", encoder]
+        if encoder not in _LOSSLESS_AUDIO:
+            args += ["-b:a", settings.audio_bitrate]
+        return args
+    encoder = AUDIO_ENCODERS[mode]
+    args = ["-c:a", encoder]
+    if encoder not in _LOSSLESS_AUDIO:
+        args += ["-b:a", settings.audio_bitrate]
+    return args
 
 
 def devnull_path() -> str:
@@ -104,7 +120,7 @@ def build_commands(input_path: str, output_path: str, settings: ConversionSettin
         cmd += _video_args(settings, hw_encoder)
     cmd += _audio_args(settings)
     if (not is_extract and settings.video_codec != "copy"
-            and container in ("mp4", "mov")):
+            and container in ("mp4", "mov", "m4v")):
         cmd += ["-movflags", "+faststart"]
     cmd += ["-progress", "pipe:1", "-nostats"]
 

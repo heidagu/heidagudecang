@@ -7,18 +7,32 @@ const CRF_SPECS = {
   h265: { def: 28, min: 20, max: 32 },
   av1:  { def: 30, min: 20, max: 40 },
   vp9:  { def: 31, min: 15, max: 35 },
+  vp8:  { def: 10, min: 4, max: 63 },
+};
+const QSCALE_SPECS = {
+  mpeg4:      { def: 5, min: 2, max: 31 },
+  mpeg2video: { def: 5, min: 2, max: 31 },
+  mjpeg:      { def: 5, min: 2, max: 31 },
 };
 const CONTAINER_CODECS = {
-  mp4:  ["h264", "h265", "av1"],
-  mkv:  ["h264", "h265", "av1", "vp9"],
-  mov:  ["h264", "h265"],
-  webm: ["vp9", "av1"],
+  mp4:  ["h264", "h265", "av1", "mpeg4"],
+  mkv:  ["h264", "h265", "av1", "vp9", "vp8", "mpeg4", "mpeg2video", "prores", "mjpeg"],
+  mov:  ["h264", "h265", "mpeg4", "prores", "mjpeg"],
+  webm: ["vp9", "vp8", "av1"],
+  avi:  ["mpeg4", "mpeg2video", "mjpeg"],
+  flv:  ["h264", "mpeg4"],
+  m4v:  ["h264", "h265", "mpeg4"],
+  ts:   ["h264", "h265", "mpeg2video"],
 };
 const CONTAINER_AUDIO = {
-  mp4:  ["copy", "aac", "none"],
-  mkv:  ["copy", "aac", "opus", "mp3", "none"],
-  mov:  ["copy", "aac", "none"],
+  mp4:  ["copy", "aac", "flac", "none"],
+  mkv:  ["copy", "aac", "opus", "mp3", "flac", "ac3", "none"],
+  mov:  ["copy", "aac", "flac", "none"],
   webm: ["copy", "opus", "none"],
+  avi:  ["copy", "mp3", "ac3", "none"],
+  flv:  ["copy", "aac", "mp3", "none"],
+  m4v:  ["copy", "aac", "none"],
+  ts:   ["copy", "aac", "mp3", "ac3", "none"],
 };
 const STATUS_LABELS = {
   queued: "排队中", running: "转换中", done: "完成",
@@ -229,7 +243,7 @@ function refreshUI() {
   const codec = $("codec").value;
   const container = $("container").value;
   const audio = $("audio").value;
-  const qm = document.querySelector('input[name="qm"]:checked').value;
+  let qm = document.querySelector('input[name="qm"]:checked').value;
   const hw = $("hw").checked;
 
   // 容器选项：禁用与当前编码不兼容的
@@ -244,14 +258,22 @@ function refreshUI() {
   }
 
   // 画质滑块范围随编码变化
-  const spec = CRF_SPECS[codec];
   const isCopy = codec === "copy";
-  if (spec) {
+  const crfSpec = CRF_SPECS[codec];
+  if (crfSpec) {
     const s = $("crf");
-    s.min = spec.min; s.max = spec.max;
+    s.min = crfSpec.min; s.max = crfSpec.max;
     const cur = parseInt(s.value, 10);
-    if (!(cur >= spec.min && cur <= spec.max)) s.value = spec.def;
+    if (!(cur >= crfSpec.min && cur <= crfSpec.max)) s.value = crfSpec.def;
     $("crf-val").textContent = s.value;
+  }
+  const qSpec = QSCALE_SPECS[codec];
+  if (qSpec) {
+    const s = $("qscale");
+    s.min = qSpec.min; s.max = qSpec.max;
+    const cur = parseInt(s.value, 10);
+    if (!(cur >= qSpec.min && cur <= qSpec.max)) s.value = qSpec.def;
+    $("qscale-val").textContent = s.value;
   }
 
   // copy 模式：禁用视频滤镜与画质
@@ -266,16 +288,38 @@ function refreshUI() {
   $("hw-info").textContent = hwAvail[codec]
     ? "可用: " + hwAvail[codec] : (codec === "h264" || codec === "h265") ? "未检测到" : "";
 
-  // 两遍编码：仅 x264/x265/vp9 + 固定码率 + 非硬件
-  $("two-pass").disabled = !(qm === "bitrate" && !hw && ["h264", "h265", "vp9"].includes(codec));
+  // 两遍编码：仅 x264/x265/vp9/vp8/mpeg4/mpeg2video + 固定码率 + 非硬件
+  $("two-pass").disabled = !(qm === "bitrate" && !hw &&
+    ["h264", "h265", "vp9", "vp8", "mpeg4", "mpeg2video"].includes(codec));
 
-  // 画质模式切换
+  // 画质模式：随编码自动切换（prores 用档位选择器，后端忽略 quality_mode）
+  const isProres = codec === "prores";
+  if (!isCopy) {
+    if (isProres) {
+      qm = "crf";
+    } else if (qm === "crf" && !CRF_SPECS[codec]) {
+      qm = QSCALE_SPECS[codec] ? "qscale" : "bitrate";
+    } else if (qm === "qscale" && !QSCALE_SPECS[codec]) {
+      qm = CRF_SPECS[codec] ? "crf" : "bitrate";
+    }
+    const radio = document.querySelector('input[name="qm"][value="' + qm + '"]');
+    if (radio && !radio.checked) radio.checked = true;
+  }
+  $("qm-crf-label").hidden = isProres || (!isCopy && !CRF_SPECS[codec]);
+  $("qm-qscale-label").hidden = isProres || (!isCopy && !QSCALE_SPECS[codec]);
+  $("qm-bitrate-label").hidden = isProres;
+
   $("crf-box").hidden = qm !== "crf" || hw;
+  $("qscale-box").hidden = qm !== "qscale" || hw;
   $("bitrate-box").hidden = qm !== "bitrate" || hw;
+  $("prores-box").hidden = !isProres || hw;
 
-  // 音频
+  // 音频（flac 与无损提取格式无码率概念）
   $("extract-ext-label").hidden = audio !== "extract";
-  $("audio-bitrate-label").hidden = audio === "copy" || audio === "none";
+  const losslessExtract = audio === "extract" &&
+    ($("extract-ext").value === "wav" || $("extract-ext").value === "flac");
+  $("audio-bitrate-label").hidden = audio === "copy" || audio === "none" ||
+    audio === "flac" || losslessExtract;
   let warn = "";
   if (container && audio !== "extract" && !CONTAINER_AUDIO[container].includes(audio)) {
     warn = "提示: " + container.toUpperCase() + " 容器不支持所选音频处理方式（提交时会报错）";
@@ -414,10 +458,13 @@ function buildSettings() {
 
   if (qm === "crf") {
     s.crf = parseInt($("crf").value, 10);
+  } else if (qm === "qscale") {
+    s.qscale = parseInt($("qscale").value, 10);
   } else {
     s.bitrate = $("bitrate").value.trim() || "6M";
     s.two_pass = $("two-pass").checked && !$("two-pass").disabled;
   }
+  if (codec === "prores") s.prores_profile = $("prores-profile").value;
   return s;
 }
 
@@ -598,8 +645,9 @@ function bind() {
   });
   $("btn-start").addEventListener("click", startJobs);
   $("crf").addEventListener("input", () => { $("crf-val").textContent = $("crf").value; });
+  $("qscale").addEventListener("input", () => { $("qscale-val").textContent = $("qscale").value; });
 
-  for (const id of ["codec", "container", "audio", "fps", "resolution", "hw-quality"]) {
+  for (const id of ["codec", "container", "audio", "fps", "resolution", "hw-quality", "extract-ext"]) {
     $(id).addEventListener("change", refreshUI);
   }
   $("hw").addEventListener("change", refreshUI);

@@ -39,20 +39,37 @@
         <div class="row">
           <label>视频编码
             <select id="codec">
-              <option value="h264">H.264（兼容性最好）</option>
-              <option value="h265">H.265 / HEVC（省空间）</option>
-              <option value="av1">AV1（新一代编码）</option>
-              <option value="vp9">VP9（WebM 推荐）</option>
-              <option value="copy">不转码（仅改封装/音频）</option>
+              <optgroup label="常用格式">
+                <option value="h264">H.264（兼容性最好）</option>
+                <option value="h265">H.265 / HEVC（省空间）</option>
+                <option value="av1">AV1（新一代编码）</option>
+                <option value="vp9">VP9（WebM 推荐）</option>
+                <option value="copy">不转码（仅改封装/音频）</option>
+              </optgroup>
+              <optgroup label="更多格式">
+                <option value="mpeg4">MPEG-4（老设备兼容）</option>
+                <option value="mpeg2video">MPEG-2（DVD / TS 流）</option>
+                <option value="vp8">VP8（WebM 旧编码）</option>
+                <option value="prores">ProRes（专业剪辑）</option>
+                <option value="mjpeg">MJPEG（逐帧 JPEG）</option>
+              </optgroup>
             </select>
           </label>
           <label>封装容器
             <select id="container">
               <option value="">跟随源文件</option>
-              <option value="mp4">MP4</option>
-              <option value="mkv">MKV</option>
-              <option value="mov">MOV</option>
-              <option value="webm">WebM</option>
+              <optgroup label="常用格式">
+                <option value="mp4">MP4</option>
+                <option value="mkv">MKV</option>
+                <option value="mov">MOV</option>
+                <option value="webm">WebM</option>
+              </optgroup>
+              <optgroup label="更多格式">
+                <option value="avi">AVI</option>
+                <option value="flv">FLV</option>
+                <option value="m4v">M4V</option>
+                <option value="ts">TS</option>
+              </optgroup>
             </select>
           </label>
         </div>
@@ -94,8 +111,9 @@
       <fieldset id="quality-fs">
         <legend>画质</legend>
         <div class="radio-row">
-          <label><input type="radio" name="qm" value="crf" checked> 画质优先（CRF）</label>
-          <label><input type="radio" name="qm" value="bitrate"> 固定码率</label>
+          <label id="qm-crf-label"><input type="radio" name="qm" value="crf" checked> 画质优先（CRF）</label>
+          <label id="qm-qscale-label"><input type="radio" name="qm" value="qscale"> 质量档位</label>
+          <label id="qm-bitrate-label"><input type="radio" name="qm" value="bitrate"> 固定码率</label>
           <label class="check"><input type="checkbox" id="two-pass"> 两遍编码</label>
         </div>
         <div id="crf-box" class="row">
@@ -104,6 +122,13 @@
           <span class="muted">高质量</span>
           <b id="crf-val"></b>
         </div>
+        <div id="qscale-box" class="row" hidden>
+          <span class="muted">高质量</span>
+          <input type="range" id="qscale" min="2" max="31" value="5">
+          <span class="muted">低质量</span>
+          <b id="qscale-val"></b>
+          <span class="muted">（数值越小越清晰）</span>
+        </div>
         <div id="bitrate-box" class="row" hidden>
           <input type="text" id="bitrate" list="bitrate-opts" value="6M">
           <datalist id="bitrate-opts">
@@ -111,6 +136,16 @@
             <option value="8M"><option value="12M"><option value="20M">
           </datalist>
           <span class="muted">如 6M 或 800k</span>
+        </div>
+        <div id="prores-box" class="row" hidden>
+          <label>ProRes 质量档位
+            <select id="prores-profile">
+              <option value="proxy">Proxy（代理剪辑，体积最小）</option>
+              <option value="lt">LT（轻量）</option>
+              <option value="standard" selected>Standard（标准）</option>
+              <option value="hq">HQ（高质量）</option>
+            </select>
+          </label>
         </div>
         <div class="row">
           <label class="check"><input type="checkbox" id="hw"> 硬件加速</label>
@@ -128,12 +163,18 @@
         <div class="row">
           <label>音频处理
             <select id="audio">
-              <option value="copy">原样复制（不转码）</option>
-              <option value="aac">转 AAC</option>
-              <option value="opus">转 Opus</option>
-              <option value="mp3">转 MP3</option>
-              <option value="none">静音（去掉音频）</option>
-              <option value="extract">仅提取音频</option>
+              <optgroup label="常用格式">
+                <option value="copy">原样复制（不转码）</option>
+                <option value="aac">转 AAC</option>
+                <option value="opus">转 Opus</option>
+                <option value="mp3">转 MP3</option>
+                <option value="none">静音（去掉音频）</option>
+                <option value="extract">仅提取音频</option>
+              </optgroup>
+              <optgroup label="更多格式">
+                <option value="flac">转 FLAC（无损）</option>
+                <option value="ac3">转 AC-3</option>
+              </optgroup>
             </select>
           </label>
           <label id="audio-bitrate-label">码率
@@ -144,6 +185,9 @@
               <option value="m4a">M4A (AAC)</option>
               <option value="opus">Opus</option>
               <option value="mp3">MP3</option>
+              <option value="wav">WAV（无损）</option>
+              <option value="flac">FLAC（无损）</option>
+              <option value="ac3">AC-3</option>
             </select>
           </label>
         </div>
