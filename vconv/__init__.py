@@ -55,7 +55,9 @@ def create_app(port: int = None) -> Flask:
     app.config["VCONV_HOST"] = "127.0.0.1"
     app.config["VCONV_PORT"] = _find_free_port(port or config.DEFAULT_PORT)
 
+    from . import engine as engine_module
     from . import server
 
+    app.extensions["engine"] = engine_module.Engine()
     server.register_routes(app)
     return app

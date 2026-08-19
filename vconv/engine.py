@@ -139,6 +139,8 @@ class Engine:
         """调整并发数：新任务进新池，旧池在跑任务结束后自行回收。"""
         n = min(max(int(n), config.MIN_WORKERS), config.MAX_WORKERS)
         with self._lock:
+            if self._pool is not None and self._pool_workers == n:
+                return
             old = self._pool
             self._create_pool_locked()
         if old is not None:

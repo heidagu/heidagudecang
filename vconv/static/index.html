@@ -4,84 +4,185 @@
 <meta charset="utf-8">
 <title>VConv — 视频格式转换</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  :root { color-scheme: light dark; }
-  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 720px; margin: 48px auto; padding: 0 20px; }
-  .card { border: 1px solid #8884; border-radius: 10px; padding: 20px; margin: 16px 0; }
-  button { padding: 8px 16px; border-radius: 6px; border: 1px solid #8888; background: #2d7ff9; color: #fff; cursor: pointer; }
-  .muted { color: #888; font-size: 0.9em; }
-</style>
+<link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <h1>VConv <span class="muted">视频格式转换</span></h1>
-
-  <div class="card">
-    <h2>ffmpeg 状态</h2>
-    <p id="ffmpeg-status">检测中…</p>
-    <button id="recheck">重新检测</button>
-    <button id="download" style="display:none">一键下载 ffmpeg</button>
-    <p id="download-url" class="muted"></p>
+<header>
+  <h1>VConv <span class="sub">视频格式转换</span></h1>
+  <div id="ffmpeg-box" class="ffmpeg-box">
+    <span id="ffmpeg-chip" class="chip">检测中…</span>
+    <button id="btn-recheck" class="btn small">重新检测</button>
+    <button id="btn-download" class="btn small primary" hidden>一键下载 ffmpeg</button>
+    <span id="dl-progress" class="muted"></span>
   </div>
+</header>
 
-  <div class="card">
-    <h2>设置</h2>
-    <p><label>并发数：<input id="workers" type="number" min="1" max="32" value="0"></label>
-      <span class="muted">0 = 自动（CPU 核心数 - 1）</span></p>
-    <p><label>默认输出目录：<input id="outdir" type="text" style="width: 60%"></label>
-      <span class="muted">留空 = 与源文件同目录</span></p>
-    <button id="save-settings">保存设置</button>
-  </div>
+<main>
+  <!-- 左侧：任务 -->
+  <section id="jobs-panel">
+    <h2>转换任务 <span id="job-count" class="muted"></span></h2>
+    <div id="jobs"></div>
+    <p id="jobs-empty" class="empty">还没有任务。右侧选择文件后点击「开始转换」。</p>
+    <details id="history-box">
+      <summary>历史记录</summary>
+      <ul id="history"></ul>
+    </details>
+  </section>
 
-<script>
-async function refreshFfmpeg() {
-  const el = document.getElementById("ffmpeg-status");
-  const dlBtn = document.getElementById("download");
-  const dlUrl = document.getElementById("download-url");
-  try {
-    const r = await fetch("/api/ffmpeg");
-    const s = await r.json();
-    if (s.status === "ok") {
-      el.textContent = "✓ 已检测到 ffmpeg（" + (s.version || "") + "），来源: " + s.source;
-      dlBtn.style.display = "none";
-      dlUrl.textContent = "";
-    } else {
-      el.textContent = "✗ 未检测到 ffmpeg，请点击下方按钮下载";
-      dlBtn.style.display = "";
-      dlUrl.textContent = "下载地址: " + (s.download_url || "");
-    }
-  } catch (e) {
-    el.textContent = "检测失败: " + e;
-  }
-}
+  <!-- 右侧：设置与文件 -->
+  <section id="settings-panel">
+    <div class="card">
+      <h2>转换设置</h2>
+      <fieldset id="video-fs">
+        <div class="row">
+          <label>视频编码
+            <select id="codec">
+              <option value="h264">H.264（兼容性最好）</option>
+              <option value="h265">H.265 / HEVC（省空间）</option>
+              <option value="av1">AV1（新一代编码）</option>
+              <option value="vp9">VP9（WebM 推荐）</option>
+              <option value="copy">不转码（仅改封装/音频）</option>
+            </select>
+          </label>
+          <label>封装容器
+            <select id="container">
+              <option value="">跟随源文件</option>
+              <option value="mp4">MP4</option>
+              <option value="mkv">MKV</option>
+              <option value="mov">MOV</option>
+              <option value="webm">WebM</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label>帧率
+            <select id="fps">
+              <option value="source">保持原帧率</option>
+              <option value="23.976">23.976</option>
+              <option value="24">24</option>
+              <option value="25">25</option>
+              <option value="30">30</option>
+              <option value="50">50</option>
+              <option value="60">60</option>
+              <option value="custom">自定义…</option>
+            </select>
+          </label>
+          <label id="custom-fps-label" hidden>自定义帧率
+            <input type="number" id="custom-fps" min="1" max="120" step="0.01" value="30">
+          </label>
+        </div>
+        <div class="row">
+          <label>分辨率
+            <select id="resolution">
+              <option value="source">保持原分辨率</option>
+              <option value="4k">4K（2160p）</option>
+              <option value="1080p">1080p</option>
+              <option value="720p">720p</option>
+              <option value="custom">自定义…</option>
+            </select>
+          </label>
+          <span id="custom-res-label" class="row" hidden>
+            <input type="number" id="custom-w" min="2" max="8192" placeholder="宽" value="1920">
+            ×
+            <input type="number" id="custom-h" min="2" max="8192" placeholder="高" value="1080">
+          </span>
+        </div>
+      </fieldset>
 
-async function loadSettings() {
-  const r = await fetch("/api/settings");
-  const s = await r.json();
-  document.getElementById("workers").value = s.workers;
-  document.getElementById("outdir").value = s.default_output_dir || "";
-}
+      <fieldset id="quality-fs">
+        <legend>画质</legend>
+        <div class="radio-row">
+          <label><input type="radio" name="qm" value="crf" checked> 画质优先（CRF）</label>
+          <label><input type="radio" name="qm" value="bitrate"> 固定码率</label>
+          <label class="check"><input type="checkbox" id="two-pass"> 两遍编码</label>
+        </div>
+        <div id="crf-box" class="row">
+          <span class="muted">低质量</span>
+          <input type="range" id="crf">
+          <span class="muted">高质量</span>
+          <b id="crf-val"></b>
+        </div>
+        <div id="bitrate-box" class="row" hidden>
+          <input type="text" id="bitrate" list="bitrate-opts" value="6M">
+          <datalist id="bitrate-opts">
+            <option value="2M"><option value="4M"><option value="6M">
+            <option value="8M"><option value="12M"><option value="20M">
+          </datalist>
+          <span class="muted">如 6M 或 800k</span>
+        </div>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="hw"> 硬件加速</label>
+          <select id="hw-quality" hidden>
+            <option value="high">高质量</option>
+            <option value="medium" selected>均衡</option>
+            <option value="low">速度快</option>
+          </select>
+          <span id="hw-info" class="muted"></span>
+        </div>
+      </fieldset>
 
-document.getElementById("recheck").onclick = refreshFfmpeg;
-document.getElementById("download").onclick = function () {
-  fetch("/api/ffmpeg/download", { method: "POST" }).then(function (r) {
-    if (r.status === 202) { alert("已开始后台下载，稍后点击「重新检测」"); }
-  });
-};
-document.getElementById("save-settings").onclick = async function () {
-  const body = {
-    workers: parseInt(document.getElementById("workers").value, 10) || 0,
-    default_output_dir: document.getElementById("outdir").value.trim(),
-  };
-  const r = await fetch("/api/settings", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  alert(r.ok ? "已保存" : "保存失败: " + (await r.json()).error);
-};
+      <fieldset id="audio-fs">
+        <legend>音频</legend>
+        <div class="row">
+          <label>音频处理
+            <select id="audio">
+              <option value="copy">原样复制（不转码）</option>
+              <option value="aac">转 AAC</option>
+              <option value="opus">转 Opus</option>
+              <option value="mp3">转 MP3</option>
+              <option value="none">静音（去掉音频）</option>
+              <option value="extract">仅提取音频</option>
+            </select>
+          </label>
+          <label id="audio-bitrate-label">码率
+            <input type="text" id="audio-bitrate" value="192k" size="6">
+          </label>
+          <label id="extract-ext-label" hidden>格式
+            <select id="extract-ext">
+              <option value="m4a">M4A (AAC)</option>
+              <option value="opus">Opus</option>
+              <option value="mp3">MP3</option>
+            </select>
+          </label>
+        </div>
+        <p id="audio-warning" class="warn" hidden></p>
+      </fieldset>
+    </div>
 
-refreshFfmpeg();
-loadSettings();
-</script>
+    <div class="card">
+      <h2>输出设置</h2>
+      <div class="row">
+        <label class="grow">输出目录
+          <input type="text" id="outdir" placeholder="留空 = 与源文件同目录">
+        </label>
+        <button id="btn-pick-outdir" class="btn small">选择目录…</button>
+      </div>
+      <div class="row">
+        <label>并发任务数
+          <input type="number" id="workers" min="1" max="32" value="0">
+        </label>
+        <span class="muted">0 = 自动（CPU 核心数 − 1）</span>
+        <button id="btn-save-settings" class="btn small">保存设置</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>文件</h2>
+      <div class="row">
+        <button id="btn-add-files" class="btn primary">添加视频文件…</button>
+        <details class="muted">
+          <summary>或手动输入路径</summary>
+          <textarea id="paste-paths" rows="3" placeholder="每行一个文件路径"></textarea>
+          <button id="btn-add-pasted" class="btn small">添加</button>
+        </details>
+      </div>
+      <ul id="files"></ul>
+      <button id="btn-start" class="btn primary big">开始转换</button>
+    </div>
+  </section>
+</main>
+
+<div id="toast" hidden></div>
+<script src="/static/app.js"></script>
 </body>
 </html>
