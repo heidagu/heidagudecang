@@ -1,5 +1,5 @@
-# Windows 打包脚本（在内网 Windows 主机上运行）
-# 用法: powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
+# VConv Windows build script (run via build_windows.bat, or call directly)
+# Requires: Python 3.9+ on PATH, internet access for pip
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
@@ -9,10 +9,10 @@ if (-not (Test-Path ".venv-build")) { python -m venv .venv-build }
 
 Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 & ".venv-build\Scripts\pyinstaller.exe" --noconfirm packaging\vconv.spec
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller 构建失败" }
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed (exit $LASTEXITCODE)" }
 
 $ver = & ".venv-build\Scripts\python.exe" -c "from vconv import __version__; print(__version__)"
 $out = "VConv-windows-x64-v$ver.zip"
 Remove-Item $out -ErrorAction SilentlyContinue
 Compress-Archive -Path "dist\VConv\*" -DestinationPath $out -Force
-Write-Host "产物: $out"
+Write-Host "Output: $out"
