@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>VConv — 视频格式转换</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 720px; margin: 48px auto; padding: 0 20px; }
+  .card { border: 1px solid #8884; border-radius: 10px; padding: 20px; margin: 16px 0; }
+  button { padding: 8px 16px; border-radius: 6px; border: 1px solid #8888; background: #2d7ff9; color: #fff; cursor: pointer; }
+  .muted { color: #888; font-size: 0.9em; }
+</style>
+</head>
+<body>
+  <h1>VConv <span class="muted">视频格式转换</span></h1>
+
+  <div class="card">
+    <h2>ffmpeg 状态</h2>
+    <p id="ffmpeg-status">检测中…</p>
+    <button id="recheck">重新检测</button>
+    <button id="download" style="display:none">一键下载 ffmpeg</button>
+    <p id="download-url" class="muted"></p>
+  </div>
+
+  <div class="card">
+    <h2>设置</h2>
+    <p><label>并发数：<input id="workers" type="number" min="1" max="32" value="0"></label>
+      <span class="muted">0 = 自动（CPU 核心数 - 1）</span></p>
+    <p><label>默认输出目录：<input id="outdir" type="text" style="width: 60%"></label>
+      <span class="muted">留空 = 与源文件同目录</span></p>
+    <button id="save-settings">保存设置</button>
+  </div>
+
+<script>
+async function refreshFfmpeg() {
+  const el = document.getElementById("ffmpeg-status");
+  const dlBtn = document.getElementById("download");
+  const dlUrl = document.getElementById("download-url");
+  try {
+    const r = await fetch("/api/ffmpeg");
+    const s = await r.json();
+    if (s.status === "ok") {
+      el.textContent = "✓ 已检测到 ffmpeg（" + (s.version || "") + "），来源: " + s.source;
+      dlBtn.style.display = "none";
+      dlUrl.textContent = "";
+    } else {
+      el.textContent = "✗ 未检测到 ffmpeg，请点击下方按钮下载";
+      dlBtn.style.display = "";
+      dlUrl.textContent = "下载地址: " + (s.download_url || "");
+    }
+  } catch (e) {
+    el.textContent = "检测失败: " + e;
+  }
+}
+
+async function loadSettings() {
+  const r = await fetch("/api/settings");
+  const s = await r.json();
+  document.getElementById("workers").value = s.workers;
+  document.getElementById("outdir").value = s.default_output_dir || "";
+}
+
+document.getElementById("recheck").onclick = refreshFfmpeg;
+document.getElementById("download").onclick = function () {
+  fetch("/api/ffmpeg/download", { method: "POST" }).then(function (r) {
+    if (r.status === 202) { alert("已开始后台下载，稍后点击「重新检测」"); }
+  });
+};
+document.getElementById("save-settings").onclick = async function () {
+  const body = {
+    workers: parseInt(document.getElementById("workers").value, 10) || 0,
+    default_output_dir: document.getElementById("outdir").value.trim(),
+  };
+  const r = await fetch("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  alert(r.ok ? "已保存" : "保存失败: " + (await r.json()).error);
+};
+
+refreshFfmpeg();
+loadSettings();
+</script>
+</body>
+</html>
