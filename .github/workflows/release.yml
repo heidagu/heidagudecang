@@ -1,0 +1,55 @@
+name: release
+
+# 打 tag（v*）时自动构建并发布；Windows 默认关闭（内网主机打包），可选开启
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      windows:
+        description: "构建 Windows 产物（备用渠道）"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-14      # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: 安装依赖
+        run: pip install -r requirements-dev.txt
+      - name: PyInstaller 打包
+        run: pyinstaller --noconfirm packaging/vconv.spec
+      - name: 压缩产物
+        run: |
+          cd dist
+          zip -rq "VConv-macos-arm64-${GITHUB_REF_NAME}.zip" VConv.app
+      - name: 上传 release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/VConv-macos-arm64-*.zip
+
+  windows:
+    if: github.event.inputs.windows == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      - name: 安装依赖
+        run: pip install -r requirements-dev.txt
+      - name: PyInstaller 打包
+        run: pyinstaller --noconfirm packaging/vconv.spec
+      - name: 压缩产物
+        run: Compress-Archive -Path dist\VConv\* -DestinationPath "VConv-windows-x64-$env:GITHUB_REF_NAME.zip"
+      - name: 上传 release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: VConv-windows-x64-*.zip
