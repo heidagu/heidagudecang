@@ -1,6 +1,6 @@
 # Windows 打包步骤（内网主机手动执行）
 
-在任意 Windows 10/11 x64 主机上执行，产物为 `VConv-windows-x64-v0.1.0.zip`，
+在任意 Windows 10/11 x64 主机上执行，产物为 `VConv-windows-x64-v0.2.0.zip`，
 拷回后上传到 GitHub release 即可。
 
 ## 0. 前提
@@ -32,7 +32,7 @@ powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 1. 创建独立虚拟环境 `.venv-build`（不影响系统 Python）
 2. `pip install -r requirements-dev.txt`（Flask + PyInstaller）
 3. `pyinstaller packaging\vconv.spec` → `dist\VConv\`
-4. 压缩为 `VConv-windows-x64-v0.1.0.zip`（在仓库根目录）
+4. 压缩为 `VConv-windows-x64-v0.2.0.zip`（在仓库根目录）
 
 ## 3. 冒烟测试（可选但建议）
 
@@ -47,10 +47,10 @@ dist\VConv\VConv.exe --no-browser
 
 ## 4. 传回并上传 release
 
-把 `VConv-windows-x64-v0.1.0.zip` 拷回 Mac 项目目录，执行：
+把 `VConv-windows-x64-v0.2.0.zip` 拷回 Mac 项目目录，执行：
 
 ```bash
-gh release upload v0.1.0 VConv-windows-x64-v0.1.0.zip
+gh release upload v0.2.0 VConv-windows-x64-v0.2.0.zip
 ```
 
 ## 常见问题

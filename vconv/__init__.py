@@ -1,7 +1,7 @@
 """VConv — 基于 ffmpeg 的视频格式转换工具（本地 Web 界面）。"""
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 import logging
 import os
