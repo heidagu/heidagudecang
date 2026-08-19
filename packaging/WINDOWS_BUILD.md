@@ -18,7 +18,9 @@
 
 ## 2. 执行打包
 
-打开 PowerShell（或 CMD），执行：
+**方式一（推荐）**：在资源管理器中**双击 `packaging\build_windows.bat`**，一键完成。
+
+**方式二**：打开 PowerShell 手动执行：
 
 ```powershell
 cd C:\vconv-src
